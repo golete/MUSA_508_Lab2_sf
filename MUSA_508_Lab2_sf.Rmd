@@ -360,7 +360,7 @@ A safer way to add the coordinate column and retain it with the index column `GE
 GEOID_Coords <- acsTractsPHL.2016_centroid %>%
   dplyr::mutate(longitude = sf::st_coordinates(.)[,1],
                 latitude = sf::st_coordinates(.)[,2]) %>% 
-  st_drop_geometry() %>% 
+  st_drop_geometry() %>%
   select(GEOID, latitude, longitude)
 
 head(GEOID_Coords)

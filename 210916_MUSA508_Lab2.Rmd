@@ -2,10 +2,14 @@
 title: "Lab_2_assignment_AdrianLeon"
 author: "Matt Harris + Adrián León"
 date: "16/8/2021"
+<<<<<<< HEAD
 output: github_document
 editor_options: 
   markdown: 
     wrap: sentence
+=======
+output: html_document
+>>>>>>> 05adf4038b82e9cc26791dea5b787839301ecb96
 ---
 
 ```{r setup, include=FALSE}

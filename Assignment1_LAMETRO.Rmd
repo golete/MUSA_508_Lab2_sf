@@ -1,0 +1,277 @@
+---
+title: "Assignment1_LAMETRO"
+author: "Adrián León"
+date: "9/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(kableExtra)
+
+options(scipen=999)
+options(tigris_class = "sf")
+
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
+
+census_api_key("c2bdb8d298b60ec0cb50b561a2f8df61e92f6b39")
+
+```
+
+## 
+```{r set variables}
+
+acs_variable_list.2009 <- load_variables(2009, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+
+acs_variable_list.2019 <- load_variables(2019, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+
+vars_X9 <- c("B25026_001E", # Total population in occupied housing units
+             "B25001_001E", # Total housing units
+             "B25058_001E", # Median contract rent (dollars)
+             "B25003_002E", # Owner-occupied house
+             "B25035_001E", # Median year struture built
+             "B25046_001E", # Aggregate number of vehicles available
+             "B08141_002E", # Houses without cars
+             "B08141_003E", # Houses with 1 car
+             "B19013_001E", # Median household income
+             "B25003I_001") # Number of hispanic or latino residents
+
+```
+
+
+ESRI:102645 is the NAD 83 projection in feet for the California V Zone, which contains Los Angeles County.
+
+```{r get acs data}
+
+tracts09 <- 
+  get_acs(geography = "tract",
+          variables = vars_X9, 
+          year=2009,
+          state = 06,
+          county = 037,
+          geometry=T,
+          output="wide") %>%
+  st_transform('ESRI:102645') %>%
+  rename(TotalPop = B25026_001E,
+         TotalHH = B25001_001E,
+         MedHHRent = B25058_001E,
+         HouseOwner = B25003_002E,
+         YearBuilt = B25035_001E,
+         NumVehicles = B25046_001E,
+         VehicleHH0 = B08141_002E,
+         VehicleHH1 = B08141_003E,
+         MedHHInc = B19013_001E,
+         LatinAms = B25003I_001E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(year = "2009",
+         pctHOwnership = ifelse(TotalHH > 0, HouseOwner / TotalHH, 0),
+         HouseAge = ifelse(YearBuilt == 0, NA, 2009-YearBuilt),
+         pctHHlt2Cars = ifelse(TotalHH > 0, ((VehicleHH0+VehicleHH1) / TotalHH), 0),
+         VehiclesHH = ifelse(TotalHH > 0, (NumVehicles/TotalHH), 0),
+         pctLatAms = ifelse(TotalPop > 0, LatinAms / TotalPop,0)
+  ) %>%
+  dplyr::select(-HouseOwner,-YearBuilt,-VehicleHH0,-VehicleHH1,-NumVehicles,-LatinAms)
+
+tracts19 <- 
+  get_acs(geography = "tract",
+          variables = vars_X9, 
+          year=2019,
+          state = 06,
+          county = 037,
+          geometry=T,
+          output="wide") %>%
+  st_transform('ESRI:102645') %>%
+  rename(TotalPop = B25026_001E,
+         TotalHH = B25001_001E,
+         MedHHRent = B25058_001E,
+         HouseOwner = B25003_002E,
+         YearBuilt = B25035_001E,
+         NumVehicles = B25046_001E,
+         VehicleHH0 = B08141_002E,
+         VehicleHH1 = B08141_003E,
+         MedHHInc = B19013_001E,
+         LatinAms = B25003I_001E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(year = "2019",
+         pctHOwnership = ifelse(TotalHH > 0, HouseOwner / TotalHH, 0),
+         HouseAge = ifelse(YearBuilt == 0, NA, 2019-YearBuilt),
+         pctHHlt2Cars = ifelse(TotalHH > 0, ((VehicleHH0+VehicleHH1) / TotalHH), 0),
+         VehiclesHH = ifelse(TotalHH > 0, (NumVehicles/TotalHH), 0),
+         pctLatAms = ifelse(TotalPop > 0, LatinAms / TotalPop,0)
+  ) %>%
+  dplyr::select(-HouseOwner,-YearBuilt,-VehicleHH0,-VehicleHH1,-NumVehicles,-LatinAms)
+
+allTracts <- rbind(tracts09,tracts19)
+
+```
+
+
+```{r metro stops}
+
+Metro <- st_read("/Users/adrianleon/UPENN/MUSA_508/MUSA_508_HW1/Stations_All_0316/Stations_All_0316.shp") 
+
+st_crs(Metro)
+
+metroStops <- Metro %>%
+  select(LINENUM, STATION) %>%
+  st_transform(st_crs(allTracts))
+
+```
+
+```{r buffers}
+
+MetroBuffers <- st_buffer(metroStops, 2640) %>%
+  st_union %>%
+  st_sf()
+
+```
+
+## Including Plots
+
+```{r plot, echo=FALSE}
+ggplot() + 
+  geom_sf(data=st_union(tracts09)) +
+  geom_sf(data=metroStops, aes(colour = 'Stations'), show.legend = "point", size= 2) +
+  scale_colour_manual(values = "blue") +
+  labs(title="Metro Stops", subtitle="Los Angeles County, CA") +
+  mapTheme()
+```
+
+```{r}
+
+MetroBuffers <- st_buffer(metroStops, 2640) %>%
+  st_union %>%
+  st_sf()
+
+ggplot() +
+  geom_sf(data=MetroBuffers) +
+  geom_sf(data=metroStops, show.legend = "point", size=1) +
+  mapTheme()
+
+```
+
+```{r}
+selectCentroids <-
+  st_centroid(tracts09)[MetroBuffers,] %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(tracts09, GEOID)) %>%
+  st_sf() %>%
+  dplyr::select(TotalPop) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+#plot(selectCentroids)
+
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[MetroBuffers,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[MetroBuffers, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(MedHHRent.inf = ifelse(year == "2009", MedHHRent * 1.20, MedHHRent))
+
+```
+
+```{r, echo=FALSE}
+ggplot() +
+  geom_sf(data=allTracts.group) +
+  geom_sf(data=allTracts.group, aes(fill = q5(MedHHRent.inf)), colour=(NA)) +
+  facet_wrap(~TOD) + 
+  mapTheme()
+```
+
+```{r}
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+  group_by(year, TOD) %>%
+  summarize(Rent_USD = mean(MedHHRent, na.rm = T),
+            Population = mean(TotalPop, na.rm = T),
+            Percent_LatinAms = mean(pctLatAms, na.rm = T),
+            House_Ownership = mean(pctHOwnership, na.rm = T),
+            House_Age = mean(HouseAge, na.rm = T),
+            Houses_w_Less_than_2_Cars = mean(pctHHlt2Cars, na.rm=T),
+            Vehicles_per_household = mean(VehiclesHH, na.rm=T)
+            )
+
+```
+
+
+MISSING: FOUR BAR PLOTS, ONE FOR EACH VARIABLE
+```{r}
+
+```
+
+
+
+```{r Grouped Bar Plot}
+
+allTracts.Summary %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    facet_wrap(~Variable, scales = "free", ncol=5) +
+    scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+    labs(title = "Indicator differences across time and space") +
+    plotTheme() + theme(legend.position="bottom")
+
+```
+
+```{r Data Summary Table}
+allTracts.Summary.Table <- allTracts.Summary %>%
+  unite(year.TOD, TOD, year, sep = " / ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable() %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table x.x: TOD v. Non-TOD Comparison")
+
+allTracts.SummaryTable
+```
+
+
+```{r Graduated Symbol Maps}
+
+```
+
+
+```{r Multiple Ring Buffer Function}
+
+typeof(MetroStops[4,3])
+MetroStops[4,3]
+
+allTracts.rings <- st_join(st_centroid(dplyr::select(allTracts, GEOID, year)), 
+          multipleRingBuffer(st_union(MetroStops), 47520, 2640))
+plot(allTracts.rings)
+
+allTracts.rings <-
+  st_join(st_centroid(dplyr::select(allTracts, GEOID, year)), 
+          multipleRingBuffer(st_union(metroStops), 470, 2640)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedHHRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+
+
+```
+
+```{r Crime Data}
+
+```
